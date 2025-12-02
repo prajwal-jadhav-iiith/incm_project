@@ -14,8 +14,9 @@ import torch
 from torch.utils.data import DataLoader, random_split
 
 # Phase 1 imports
-from environment import create_open_field, create_four_rooms, create_t_maze
+from environment import create_open_field, create_four_rooms, create_t_maze, create_random_barriers
 from q_learning import QLearningAgent, train_agent, evaluate_agent
+from visualization import visualize_q_values, plot_decoder_training_curves, plot_prediction_comparison
 
 # Phase 2 imports
 from decoder import (
@@ -25,7 +26,7 @@ from decoder import (
 
 
 def run_phase1(env_type='open_field', grid_size=10, n_episodes=5000, 
-               force_retrain=False):
+               force_retrain=False, agent_path='trained_agent.pkl'):
     """
     Run Phase 1: Q-learning agent training.
     
@@ -34,28 +35,36 @@ def run_phase1(env_type='open_field', grid_size=10, n_episodes=5000,
         grid_size: Size of grid
         n_episodes: Number of training episodes
         force_retrain: If True, train even if saved agent exists
+        agent_path: Path to save/load agent
     
     Returns:
         Trained agent and environment
     """
     print("\n" + "=" * 70)
-    print("PHASE 1: Q-LEARNING AGENT")
+    print(f"PHASE 1: Q-LEARNING AGENT ({env_type})")
     print("=" * 70 + "\n")
-    
-    # Check if agent exists
-    agent_path = 'trained_agent.pkl'
     
     if not force_retrain:
         try:
             import pickle
             with open(agent_path, 'rb') as f:
                 agent_state = pickle.load(f)
-            print(f"✓ Found existing agent with {len(agent_state['training_data'])} samples")
+            print(f"✓ Found existing agent at {agent_path}")
             
             use_existing = input("Use existing agent? (y/n) [y]: ").strip().lower()
             if use_existing != 'n':
-                # Load agent
-                env = create_open_field(size=grid_size)
+                # Create correct environment type for loading
+                if env_type == 'open_field':
+                    env = create_open_field(size=grid_size)
+                elif env_type == 'four_rooms':
+                    env = create_four_rooms(room_size=grid_size // 2)
+                elif env_type == 't_maze':
+                    env = create_t_maze(length=grid_size)
+                elif env_type == 'random_barriers':
+                    env = create_random_barriers(size=grid_size)
+                else:
+                    env = create_open_field(size=grid_size)
+                
                 agent = QLearningAgent(n_states=env.get_state_space_size(), n_actions=4)
                 agent.load(agent_path)
                 
@@ -80,7 +89,10 @@ def run_phase1(env_type='open_field', grid_size=10, n_episodes=5000,
         env = create_four_rooms(room_size=grid_size // 2)
     elif env_type == 't_maze':
         env = create_t_maze(length=grid_size)
+    elif env_type == 'random_barriers':
+        env = create_random_barriers(size=grid_size)
     else:
+        print(f"⚠️ Unknown environment type '{env_type}', defaulting to open_field")
         env = create_open_field(size=grid_size)
     
     print(f"✓ Environment created: {env.height}x{env.width}")
@@ -122,13 +134,19 @@ def run_phase1(env_type='open_field', grid_size=10, n_episodes=5000,
     print(f"   Mean steps: {eval_stats['mean_length']:.1f}")
     print(f"   Training samples: {len(agent.get_training_data())}")
     
+    # Visualize policy
+    print("\nGenerating policy plot...")
+    policy_path = f"learned_policy_{env_type}.png"
+    visualize_q_values(env, agent, save_path=policy_path)
+    
     # Save agent
     agent.save(agent_path)
     
     return agent, env
 
 
-def run_phase2(agent, env, hidden_size=256, n_epochs=100, batch_size=64):
+def run_phase2(agent, env, hidden_size=256, n_epochs=100, batch_size=64, 
+               decoder_path='trained_decoder.pth', env_type='open_field'):
     """
     Run Phase 2: Decoder network training.
     
@@ -138,6 +156,8 @@ def run_phase2(agent, env, hidden_size=256, n_epochs=100, batch_size=64):
         hidden_size: Number of hidden units
         n_epochs: Training epochs
         batch_size: Batch size
+        decoder_path: Path to save decoder
+        env_type: Type of environment (for metadata)
     
     Returns:
         Trained decoder model and evaluation results
@@ -224,20 +244,31 @@ def run_phase2(agent, env, hidden_size=256, n_epochs=100, batch_size=64):
     else:
         print(f"\n⚠️  RMSE > 2.0 (consider more training or data)")
     
+    # Visualize results
+    print("\nGenerating decoder plots...")
+    plot_decoder_training_curves(history, save_path=f'decoder_training_curves_{env_type}.png')
+    plot_prediction_comparison(
+        eval_results['targets'],
+        eval_results['predictions'],
+        (env.height, env.width),
+        save_path=f'decoder_predictions_{env_type}.png'
+    )
+    
     # Save model
     metadata = {
         'hidden_size': hidden_size,
         'grid_size': (env.height, env.width),
+        'env_type': env_type,
         'training_samples': n_train,
         'test_rmse': eval_results['rmse'],
         'test_mse': eval_results['mse']
     }
-    save_decoder(model, 'trained_decoder.pth', metadata)
+    save_decoder(model, decoder_path, metadata)
     
     return model, eval_results, history
 
 
-def run_preview(model, agent, env):
+def run_preview(model, agent, env, env_type='open_field'):
     """
     Run preview analysis of hidden representations.
     
@@ -245,6 +276,7 @@ def run_preview(model, agent, env):
         model: Trained decoder
         agent: Trained Q-learning agent
         env: Environment
+        env_type: Type of environment (for filename)
     """
     print("\n" + "=" * 70)
     print("PREVIEW: HIDDEN LAYER ANALYSIS")
@@ -305,7 +337,9 @@ def run_preview(model, agent, env):
     
     for idx, unit_idx in enumerate(top_units):
         ax = axes[idx]
-        im = ax.imshow(rate_maps[unit_idx], cmap='hot', interpolation='nearest')
+        im = ax.imshow(rate_maps[unit_idx], cmap='hot', interpolation='nearest',
+                       origin='lower', extent=[-0.5, env.width - 0.5, -0.5, env.height - 0.5])
+        
         ax.set_title(f'Hidden Unit {unit_idx}')
         ax.plot(env.goal_position[1], env.goal_position[0], 'g*', 
                 markersize=12, markeredgecolor='white')
@@ -313,8 +347,10 @@ def run_preview(model, agent, env):
     
     plt.suptitle('Sample Hidden Unit Spatial Tuning', fontsize=16, fontweight='bold')
     plt.tight_layout()
-    plt.savefig('hidden_unit_preview.png', dpi=300, bbox_inches='tight')
-    print(f"✓ Saved: hidden_unit_preview.png")
+    
+    filename = f'hidden_unit_preview_{env_type}.png'
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    print(f"✓ Saved: {filename}")
     plt.show()
 
 
@@ -328,24 +364,49 @@ def main():
     print("\n📋 Configuration")
     print("-" * 70)
     
+    print("Available environments:")
+    print("  1. Open Field (default)")
+    print("  2. Four Rooms")
+    print("  3. T-Maze")
+    print("  4. Random Barriers")
+    
+    env_choice = input("Select environment [1-4]: ").strip()
+    
+    if env_choice == '2':
+        env_type = 'four_rooms'
+    elif env_choice == '3':
+        env_type = 't_maze'
+    elif env_choice == '4':
+        env_type = 'random_barriers'
+    else:
+        env_type = 'open_field'
+    
     grid_size = int(input("Grid size [default: 10]: ").strip() or "10")
     n_episodes = int(input("Q-learning episodes [default: 5000]: ").strip() or "5000")
     hidden_size = int(input("Decoder hidden units [default: 256]: ").strip() or "256")
     n_epochs = int(input("Decoder training epochs [default: 100]: ").strip() or "100")
     
+    # Define file paths based on environment
+    agent_path = f'trained_agent_{env_type}.pkl'
+    decoder_path = f'trained_decoder_{env_type}.pth'
+    
     print(f"\n✓ Configuration:")
+    print(f"   Environment: {env_type}")
     print(f"   Grid: {grid_size}x{grid_size}")
     print(f"   Q-learning: {n_episodes} episodes")
     print(f"   Decoder: {hidden_size} hidden units, {n_epochs} epochs")
+    print(f"   Agent file: {agent_path}")
+    print(f"   Decoder file: {decoder_path}")
     
     # Run pipeline
     try:
         # Phase 1
         agent, env = run_phase1(
-            env_type='open_field',
+            env_type=env_type,
             grid_size=grid_size,
             n_episodes=n_episodes,
-            force_retrain=False
+            force_retrain=False,
+            agent_path=agent_path
         )
         
         # Phase 2
@@ -354,11 +415,13 @@ def main():
             env=env,
             hidden_size=hidden_size,
             n_epochs=n_epochs,
-            batch_size=64
+            batch_size=64,
+            decoder_path=decoder_path,
+            env_type=env_type
         )
         
         # Preview
-        run_preview(model, agent, env)
+        run_preview(model, agent, env, env_type=env_type)
         
         # Final summary
         print("\n" + "=" * 70)
@@ -366,12 +429,12 @@ def main():
         print("=" * 70)
         
         print("\n📁 Generated Files:")
-        print("   • trained_agent.pkl - Q-learning agent")
-        print("   • trained_decoder.pth - Spatial decoder")
-        print("   • hidden_unit_preview.png - Sample rate maps")
+        print(f"   • {agent_path} - Q-learning agent")
+        print(f"   • {decoder_path} - Spatial decoder")
+        print(f"   • hidden_unit_preview_{env_type}.png - Sample rate maps")
         
         print("\n📊 Performance Summary:")
-        print(f"   • Q-learning success: {eval_agent(env, agent, n_episodes=50)['success_rate']:.1%}")
+        print(f"   • Q-learning success: {evaluate_agent(env, agent, n_episodes=50)['success_rate']:.1%}")
         print(f"   • Decoder RMSE: {eval_results['rmse']:.4f} grid units")
         print(f"   • Hidden units: {model.hidden_size}")
         

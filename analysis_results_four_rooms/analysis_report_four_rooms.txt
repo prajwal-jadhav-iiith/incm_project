@@ -1,0 +1,62 @@
+
+======================================================================
+COMPREHENSIVE ANALYSIS SUMMARY
+======================================================================
+
+📊 OVERALL STATISTICS
+----------------------------------------------------------------------
+Total Hidden Units:        256
+Place Cells Detected:      156 (60.9%)
+Units with Place Fields:   256
+Mean Fields per Unit:      4.07
+
+📈 SPATIAL INFORMATION (bits)
+----------------------------------------------------------------------
+All Units:       1.7064 ± 1.1710
+Place Cells:     1.5953 ± 0.4749
+Minimum (place): 0.6501
+Maximum (place): 3.7612
+
+🎯 SPARSITY
+----------------------------------------------------------------------
+All Units:       0.3302 ± 0.1915
+Place Cells:     0.2898 ± 0.0967
+Biological Range: 0.1 - 0.3 (typical)
+
+🔬 PLACE FIELD CHARACTERISTICS
+----------------------------------------------------------------------
+Mean Field Size:       0.250 (fraction of environment)
+Mean # Fields:         4.28
+Single Field Units:    21
+Multi-Field Units:     135
+
+✅ SUCCESS CRITERIA (from proposal)
+----------------------------------------------------------------------
+✅ Place Cell %:  60.9% (target: ≥30%)
+✅ Spatial Info:  1.595 bits (target: ≥0.5 bits)
+
+======================================================================
+🎉 OVERALL: SUCCESS - All criteria met!
+======================================================================
+
+📝 INTERPRETATION
+----------------------------------------------------------------------
+
+The decoder network has successfully developed place cell-like representations!
+
+Key Findings:
+• A significant proportion of hidden units exhibit localized spatial tuning
+• These units show high spatial information content
+• The representations are sparse, similar to biological place cells
+• Place fields tile the environment, providing comprehensive coverage
+
+This demonstrates that place cell-like representations can emerge spontaneously
+from learning to decode spatial information from task-optimized Q-values,
+without requiring specialized, domain-specific neural circuits.
+
+This supports the hypothesis that place cells are a natural computational
+solution to spatial representation problems, rather than being hardwired.
+        
+
+======================================================================
+

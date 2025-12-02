@@ -8,10 +8,13 @@ in the decoder network's hidden layer.
 import numpy as np
 import pickle
 from analysis import PlaceCellAnalyzer
-from visualization import create_comprehensive_report
+from visualization import create_comprehensive_report, visualize_q_values
 from decoder import load_decoder
 from q_learning import QLearningAgent
-from environment import GridWorld
+from environment import (
+    GridWorld, create_open_field, create_four_rooms, 
+    create_t_maze, create_random_barriers
+)
 import os
 
 
@@ -65,42 +68,51 @@ def create_environment(metadata, agent):
     Returns:
         GridWorld environment
     """
-    # Get grid size from metadata
-    grid_size = metadata.get('grid_size', (10, 10))
-    height, width = grid_size
+    # Get grid size and type from metadata
+    grid_size_tuple = metadata.get('grid_size', (10, 10))
+    height, width = grid_size_tuple
+    env_type = metadata.get('env_type', 'open_field')
     
     print(f"Creating environment from metadata...")
+    print(f"  Type: {env_type}")
     print(f"  Grid size: {height}×{width}")
     print(f"  Expected states: {height * width}")
-    print(f"  Agent has states: {agent.n_states}")
     
+    # Recreate specific environment type
+    # Note: For T-maze, dimensions might be specific (height, width*2)
+    # We use the factory functions which should match Phase 1
+    
+    if env_type == 'open_field':
+        # Assuming square for open field if created via factory
+        env = create_open_field(size=height)
+    elif env_type == 'four_rooms':
+        # room_size = grid_size // 2
+        env = create_four_rooms(room_size=height // 2)
+    elif env_type == 't_maze':
+        # height is length
+        env = create_t_maze(length=height)
+    elif env_type == 'random_barriers':
+        env = create_random_barriers(size=height)
+    else:
+        print(f"⚠️ Unknown env_type '{env_type}', defaulting to generic GridWorld")
+        env = GridWorld(
+            grid_size=(height, width),
+            goal_position=(height - 1, width - 1),
+            start_position=(0, 0)
+        )
+
     # Validate dimensions match
-    if height * width != agent.n_states:
-        print(f"⚠️  WARNING: Dimension mismatch!")
-        print(f"  Metadata suggests {height}×{width} = {height*width} states")
-        print(f"  But agent has {agent.n_states} states")
-        print(f"  Attempting to infer correct dimensions...")
+    if env.get_state_space_size() != agent.n_states:
+        print(f"⚠️  WARNING: Dimension mismatch after reconstruction!")
+        print(f"  Recreated Env: {env.get_state_space_size()} states")
+        print(f"  Agent: {agent.n_states} states")
+        print(f"  Attempting fallback to generic GridWorld...")
         
-        # Try to infer dimensions from agent
-        n = agent.n_states
-        # Try different factorizations
-        for h in range(1, int(np.sqrt(n)) + 1):
-            if n % h == 0:
-                w = n // h
-                if abs(h - w) <= 5:  # Prefer close to square
-                    height, width = h, w
-                    print(f"  Using inferred dimensions: {height}×{width}")
-                    break
-    
-    # Create environment with exact dimensions
-    env = GridWorld(
-        grid_size=(height, width),
-        goal_position=(height - 1, width - 1),
-        start_position=(0, 0),
-        walls=[],
-        goal_reward=10.0,
-        step_penalty=-0.01
-    )
+        env = GridWorld(
+            grid_size=(height, width),
+            goal_position=(height - 1, width - 1),
+            start_position=(0, 0)
+        )
     
     # Final validation
     if env.get_state_space_size() != agent.n_states:
@@ -109,7 +121,7 @@ def create_environment(metadata, agent):
         print(f"  Agent: {agent.n_states} states")
         return None
     
-    print(f"✓ Environment created: {grid_size}")
+    print(f"✓ Environment created: {grid_size_tuple}")
     print(f"  Validation: {env.get_state_space_size()} states = {agent.n_states} states ✓")
     
     return env
@@ -264,8 +276,39 @@ def main():
     print("PHASE 3: COMPREHENSIVE PLACE CELL ANALYSIS")
     print("=" * 70 + "\n")
     
+    # Select environment to analyze
+    print("Select environment to analyze:")
+    print("  1. Open Field (default)")
+    print("  2. Four Rooms")
+    print("  3. T-Maze")
+    print("  4. Random Barriers")
+    
+    env_choice = input("Select environment [1-4]: ").strip()
+    
+    if env_choice == '2':
+        env_type = 'four_rooms'
+    elif env_choice == '3':
+        env_type = 't_maze'
+    elif env_choice == '4':
+        env_type = 'random_barriers'
+    else:
+        env_type = 'open_field'
+        
+    agent_path = f'trained_agent_{env_type}.pkl'
+    decoder_path = f'trained_decoder_{env_type}.pth'
+    
+    # Fallback for legacy filenames (only for open_field)
+    if env_type == 'open_field' and not os.path.exists(agent_path) and os.path.exists('trained_agent.pkl'):
+        print("Note: Using legacy filename 'trained_agent.pkl'")
+        agent_path = 'trained_agent.pkl'
+        decoder_path = 'trained_decoder.pth'
+    
+    print(f"\nAnalyzing: {env_type}")
+    print(f"Agent: {agent_path}")
+    print(f"Decoder: {decoder_path}")
+    
     # Load models
-    decoder_model, agent, metadata = load_models()
+    decoder_model, agent, metadata = load_models(decoder_path, agent_path)
     
     if decoder_model is None:
         return
@@ -325,8 +368,16 @@ def main():
     print("Generating Visualizations")
     print("=" * 70 + "\n")
     
-    output_dir = input("Output directory for figures [default: analysis_results]: ").strip()
-    output_dir = output_dir or "analysis_results"
+    output_dir = input(f"Output directory for figures [default: analysis_results_{env_type}]: ").strip()
+    output_dir = output_dir or f"analysis_results_{env_type}"
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Visualize policy for this analysis run
+    print(f"\nGenerating policy plot for {env_type}...")
+    policy_path = f"{output_dir}/learned_policy.png"
+    visualize_q_values(env, agent, save_path=policy_path)
     
     create_comprehensive_report(analyzer, save_dir=output_dir)
     

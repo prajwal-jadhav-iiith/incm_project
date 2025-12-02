@@ -18,78 +18,8 @@ from decoder import (
     train_decoder, evaluate_decoder, save_decoder
 )
 from q_learning import QLearningAgent
+from visualization import plot_decoder_training_curves, plot_prediction_comparison
 import pickle
-
-
-def plot_training_curves(history, save_path=None):
-    """Plot training and validation loss curves."""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    epochs = range(1, len(history['train_loss']) + 1)
-    ax.plot(epochs, history['train_loss'], 'b-', label='Training Loss', linewidth=2)
-    
-    if history['val_loss']:
-        ax.plot(epochs, history['val_loss'], 'r-', label='Validation Loss', linewidth=2)
-    
-    ax.set_xlabel('Epoch', fontsize=12)
-    ax.set_ylabel('MSE Loss', fontsize=12)
-    ax.set_title('Decoder Training Progress', fontsize=14, fontweight='bold')
-    ax.legend(fontsize=11)
-    ax.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Training curves saved to {save_path}")
-    
-    plt.show()
-
-
-def plot_prediction_comparison(targets, predictions, grid_size, save_path=None):
-    """Visualize actual vs predicted positions."""
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    
-    # Actual positions
-    axes[0].scatter(targets[:, 1], targets[:, 0], alpha=0.5, s=10)
-    axes[0].set_title('Actual Positions', fontsize=12, fontweight='bold')
-    axes[0].set_xlabel('X')
-    axes[0].set_ylabel('Y')
-    axes[0].set_xlim(-0.5, grid_size[1] - 0.5)
-    axes[0].set_ylim(-0.5, grid_size[0] - 0.5)  # No flip needed for scatter
-    axes[0].grid(True, alpha=0.3)
-    axes[0].set_aspect('equal')
-    
-    # Predicted positions
-    axes[1].scatter(predictions[:, 1], predictions[:, 0], alpha=0.5, s=10, color='orange')
-    axes[1].set_title('Predicted Positions', fontsize=12, fontweight='bold')
-    axes[1].set_xlabel('X')
-    axes[1].set_ylabel('Y')
-    axes[1].set_xlim(-0.5, grid_size[1] - 0.5)
-    axes[1].set_ylim(-0.5, grid_size[0] - 0.5)  # No flip needed for scatter
-    axes[1].grid(True, alpha=0.3)
-    axes[1].set_aspect('equal')
-    
-    # Prediction errors
-    errors = np.linalg.norm(targets - predictions, axis=1)
-    scatter = axes[2].scatter(targets[:, 1], targets[:, 0], 
-                             c=errors, cmap='RdYlGn_r', alpha=0.6, s=20)
-    axes[2].set_title('Prediction Error', fontsize=12, fontweight='bold')
-    axes[2].set_xlabel('X')
-    axes[2].set_ylabel('Y')
-    axes[2].set_xlim(-0.5, grid_size[1] - 0.5)
-    axes[2].set_ylim(-0.5, grid_size[0] - 0.5)  # No flip needed for scatter
-    axes[2].set_aspect('equal')
-    plt.colorbar(scatter, ax=axes[2], label='Error (grid units)')
-    axes[2].grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Prediction comparison saved to {save_path}")
-    
-    plt.show()
 
 
 def load_agent_data(agent_path: str):
@@ -235,7 +165,7 @@ def main():
     # ========== 7. Visualize Results ==========
     print("\nGenerating visualizations...")
     
-    plot_training_curves(history, save_path='decoder_training_curves.png')
+    plot_decoder_training_curves(history, save_path='decoder_training_curves.png')
     plot_prediction_comparison(
         eval_results['targets'],
         eval_results['predictions'],

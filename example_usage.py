@@ -94,7 +94,7 @@ def visualize_q_values(env, agent, save_path=None):
     grid[env.goal_position] = 1
     
     # Plot grid
-    ax.imshow(grid, cmap='RdYlGn', alpha=0.3, vmin=-1, vmax=1)
+    ax.imshow(grid, cmap='RdYlGn', alpha=0.3, vmin=-1, vmax=1, origin="lower")
     
     # Draw Q-value arrows
     arrow_props = dict(arrowstyle='->', lw=2)
